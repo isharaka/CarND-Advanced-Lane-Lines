@@ -2,15 +2,11 @@ import numpy as np
 import cv2
 import matplotlib.pyplot as plt
 import matplotlib.image as mpimg
-import pickle
 
 
 
-
-# Define a function that applies Sobel x or y, 
-# then takes an absolute value and applies a threshold.
-# Note: calling your function with orient='x', thresh_min=5, thresh_max=100
-# should produce output like the example image shown above this quiz.
+# Return a binary image where sobel gradient in the specified orientation
+# is within specified thresholds
 def abs_sobel_threshold(img, orient='x', thresh_min=0, thresh_max=255):
     # Take the derivative in x or y given orient = 'x' or 'y'
     if orient == 'x':
@@ -23,19 +19,15 @@ def abs_sobel_threshold(img, orient='x', thresh_min=0, thresh_max=255):
     # Scale to 8-bit (0 - 25then convert to type = np.uint8
     scaled_sobel = np.uint8(255*abs_sobel/np.max(abs_sobel))
     # Create a mask of 1's where the scaled gradient magnitude 
-            # is > thresh_min and < thresh_max
+    # is > thresh_min and < thresh_max
     binary_output = np.zeros_like(scaled_sobel)
     binary_output[(scaled_sobel >= thresh_min) & (scaled_sobel <= thresh_max)] = 1
-    # Return this mask as your binary_output image
-    #binary_output = np.copy(img) # Remove this line
+    # Return this mask as binary_output image
     return binary_output
 
-# Define a function that applies Sobel x and y, 
-# then computes the magnitude of the gradient
-# and applies a threshold
+# Return a binary image where the magnitude of sobel gradient 
+# is within specified thresholds
 def mag_threshold(img, sobel_kernel=3, mag_threshold=(0, 255)):
-    
-    # Apply the following steps to img
     # Take the gradient in x and y separately
     sobelx = cv2.Sobel(img, cv2.CV_64F, 1, 0, ksize=sobel_kernel)
     sobely = cv2.Sobel(img, cv2.CV_64F, 0, 1, ksize=sobel_kernel)
@@ -47,12 +39,11 @@ def mag_threshold(img, sobel_kernel=3, mag_threshold=(0, 255)):
     # Create a binary mask where mag thresholds are met
     binary_output = np.zeros_like(gradmag)
     binary_output[(gradmag >= mag_threshold[0]) & (gradmag <= mag_threshold[1])] = 1
-    # Return this mask as your binary_output image
+    # Return this mask as binary_output image
     return binary_output
 
-# Define a function that applies Sobel x and y, 
-# then computes the direction of the gradient
-# and applies a threshold.
+# Return a binary image where the direction of sobel gradient 
+# is within specified thresholds
 def dir_threshold(img, sobel_kernel=3, thresh=(0, np.pi/2)):
     # Take the gradient in x and y separately
     sobelx = cv2.Sobel(img, cv2.CV_64F, 1, 0, ksize=sobel_kernel)
@@ -63,19 +54,18 @@ def dir_threshold(img, sobel_kernel=3, thresh=(0, np.pi/2)):
     # Create a binary mask where direction thresholds are met
     binary_output =  np.zeros_like(absgraddir)
     binary_output[(absgraddir >= thresh[0]) & (absgraddir <= thresh[1])] = 1
-    # Return this mask as your binary_output image
-    #binary_output = np.copy(img) # Remove this line
+    # Return this mask as binary_output image
     return binary_output
 
 if __name__ == '__main__':
     # Read in an image and grayscale it
-    image = cv2.imread('examples/signs_vehicles_xygrad.png')
+    image = cv2.imread('test_images/straight_lines1.jpg')
     image = np.asarray(image)[:,:,::-1].copy()
 
     # Convert to grayscale
     gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
 
-    # Run the function
+    # Calculate sobel thresholded images
     gradx = abs_sobel_threshold(gray, orient='x', thresh_min=20, thresh_max=100)
     grady = abs_sobel_threshold(gray, orient='y', thresh_min=20, thresh_max=100)
     mag_binary = mag_threshold(gray, sobel_kernel=3, mag_threshold=(30, 100))
@@ -83,6 +73,12 @@ if __name__ == '__main__':
 
     combined = np.zeros_like(dir_binary)
     combined[((gradx == 1) & (grady == 1)) | ((mag_binary == 1) & (dir_binary == 1))] = 1
+
+    cv2.imwrite('output_images/sobel_x.jpg',255*gradx)
+    cv2.imwrite('output_images/sobel_y.jpg',255*grady)
+    cv2.imwrite('output_images/sobel_combined.jpg',255*combined)
+    cv2.imwrite('output_images/sobel_mag.jpg',255*mag_binary)
+    cv2.imwrite('output_images/sobel_dir.jpg',255*dir_binary)
 
     # Plot the result
     f, ax = plt.subplots(2, 2)
