@@ -8,53 +8,55 @@ from calibration import calibration_data
 from sobel import abs_sobel_threshold, mag_threshold, dir_threshold
 
 
-
+# Preprocess a frame from camera so that lane features can be extracted
+# Returns a binary image with same width and height as the frame with
+# ones in pixels where lanes are likely to be present
 def preprocess_frame(img, mtx, dist, M, M_inv, debug=False):
+    # COrrect for camera distortion
     undist = cv2.undistort(img, mtx, dist, None, mtx)
 
-    # Convert to HSV color space and separate the V channel
+    # Convert to HLS color space and separate the channels
     hsv = cv2.cvtColor(undist, cv2.COLOR_RGB2HLS).astype(np.float)
     h_channel = hsv[:,:,0]
     l_channel = hsv[:,:,1]
     s_channel = hsv[:,:,2]
 
-    print(np.min(h_channel))
-    print(np.max(h_channel))
-    print(np.min(l_channel))
-    print(np.max(l_channel))
-    print(np.min(s_channel))
-    print(np.max(s_channel))
-
+    # Calculate sobel gradients in x direction.
+    # Lane lines are almost vertical therefore x direction sobel gradeient will 
+    # pick the lane markings
     sxbinary = abs_sobel_threshold(l_channel, orient='x', thresh_min=20, thresh_max=100)
     sxbinary = 1 * sxbinary
 
-    # Threshold color channel
+    # S channel picked the lanes the best. It is also invariant with regards to
+    # the colour of the lane lines
     s_binary = np.zeros_like(s_channel)
     s_binary[(s_channel >= 170) & (s_channel <= 255)] = 1
 
+    # Combine information from color thersholding and sobel gradient
     combined = np.zeros_like(s_channel)
     combined[( ( sxbinary == 1 ) | ( s_binary == 1) )] = 1
 
-    print(np.max(s_binary))
-    print(np.max(sxbinary))
+    if debug==True:
+        color_binary = np.dstack(( np.zeros_like(s_channel), sxbinary, s_binary))
 
-    color_binary = np.dstack(( np.zeros_like(s_channel), sxbinary, s_binary))
-
-
-    binary_warped = cv2.warpPerspective(combined, M, (color_binary.shape[1], color_binary.shape[0]))
+    # Warp the preprocessed image to a birds eye view
+    binary_warped = cv2.warpPerspective(combined, M, (img.shape[1], img.shape[0]))
 
     return undist, combined, binary_warped
 
-
+# Given a binary image with ones in pixels where lanes are likely to be present
+# pick the pixels where the left and right lanes are and fit quadratic curves
+# to left and right lanes
 def fit_lanes_init(binary_warped, debug=False):
     binary_warped = np.uint8(255.0 * binary_warped)
-    # Assuming you have created a warped binary image called "binary_warped"
-    # Take a histogram of the bottom half of the image
+    # Take a histogram of the bottom half of the image. This determines the
+    # most likely location of the lanes in the bottom lines of the frame
     histogram = np.sum(binary_warped[int(binary_warped.shape[0]/2):,:], axis=0)
 
     if debug == True:
         # Create an output image to draw on and  visualize the result
         out_img = np.dstack((binary_warped, binary_warped, binary_warped))*255
+
     # Find the peak of the left and right halves of the histogram
     # These will be the starting point for the left and right lines
     midpoint = np.int(histogram.shape[0]/2)
@@ -148,24 +150,30 @@ def fit_lanes_init(binary_warped, debug=False):
     return left_fit, right_fit, len(left_lane_inds), len(right_lane_inds)
 
 
-
+# Given a binary image with ones in pixels where lanes are likely to be present
+# and the likey quadratic curves for left and right lanes
+# pick the pixels where the left and right lanes are and fit quadratic curves
+# to left and right lanes
 def fit_lanes(binary_warped, left_fit, right_fit, debug=False):
     binary_warped = np.uint8(255.0 * binary_warped)
-    # Assume you now have a new warped binary image 
-    # from the next frame of video (also called "binary_warped")
-    # It's now much easier to find line pixels!
+
+    # Identify the x and y positions of all nonzero pixels in the image
     nonzero = binary_warped.nonzero()
     nonzeroy = np.array(nonzero[0])
     nonzerox = np.array(nonzero[1])
+
+    # Identify the nonzero pixels in x and y within the margin
+    # from the likely lane curves
     margin = 100
     left_lane_inds = ((nonzerox > (left_fit[0]*(nonzeroy**2) + left_fit[1]*nonzeroy + left_fit[2] - margin)) & (nonzerox < (left_fit[0]*(nonzeroy**2) + left_fit[1]*nonzeroy + left_fit[2] + margin))) 
     right_lane_inds = ((nonzerox > (right_fit[0]*(nonzeroy**2) + right_fit[1]*nonzeroy + right_fit[2] - margin)) & (nonzerox < (right_fit[0]*(nonzeroy**2) + right_fit[1]*nonzeroy + right_fit[2] + margin)))  
 
-    # Again, extract left and right line pixel positions
+    # Extract left and right line pixel positions
     leftx = nonzerox[left_lane_inds]
     lefty = nonzeroy[left_lane_inds] 
     rightx = nonzerox[right_lane_inds]
     righty = nonzeroy[right_lane_inds]
+
     # Fit a second order polynomial to each
     left_fit = np.polyfit(lefty, leftx, 2)
     right_fit = np.polyfit(righty, rightx, 2)
@@ -209,39 +217,49 @@ def fit_lanes(binary_warped, left_fit, right_fit, debug=False):
     return left_fit, right_fit, len(left_lane_inds), len(right_lane_inds)
 
 
-
+# Given a binary image with ones in pixels where lanes are likely to be present
+# and the likey quadratic curves for left and right lanes
+# calculate the curve radius of left and right lanes, lane width
+# and the position of the car relative the middle of the lane
 def lane_curvature(binary_warped, xm_per_pix, ym_per_pix, left_fit, right_fit):
-
+    # Calculate points on the curves representing left and right lane
     ploty = np.linspace(0, binary_warped.shape[0]-1, binary_warped.shape[0] )
     left_fitx = left_fit[0]*ploty**2 + left_fit[1]*ploty + left_fit[2]
     right_fitx = right_fit[0]*ploty**2 + right_fit[1]*ploty + right_fit[2]
 
+    # We are avaluating the curvature of the lanes at points neares to the camera
     y_eval = np.max(ploty)
 
     # Fit new polynomials to x,y in world space
     left_fit_cr = np.polyfit(ploty*ym_per_pix, left_fitx*xm_per_pix, 2)
     right_fit_cr = np.polyfit(ploty*ym_per_pix, right_fitx*xm_per_pix, 2)
-    # Calculate the new radii of curvature
+
+    # Calculate the new radii of curvature in meters
     left_curverad = ((1 + (2*left_fit_cr[0]*y_eval*ym_per_pix + left_fit_cr[1])**2)**1.5) / np.absolute(2*left_fit_cr[0])
     right_curverad = ((1 + (2*right_fit_cr[0]*y_eval*ym_per_pix + right_fit_cr[1])**2)**1.5) / np.absolute(2*right_fit_cr[0])
-    # Now our radius of curvature is in meters
 
+    # Calculate the points where left and right lanes intersects the bottom of the frame
     left_lane_pos = left_fitx[np.uint16(y_eval)]
     right_lane_pos = right_fitx[np.uint16(y_eval)]
 
+    # Calculate lane width in meters
     lane_width = (right_lane_pos-left_lane_pos) * xm_per_pix
+
+    # Calculate the position of the car relative the mid point of the lane in meters
     lane_deviation = (((right_lane_pos+left_lane_pos) / 2) - (binary_warped.shape[1]/2)) * xm_per_pix
     
-    # Example values: 632.1 m    626.2 m
     return left_curverad, right_curverad, lane_width, lane_deviation
 
 
-
+# Given an undistorted frame from the camera
+# and the likey quadratic curves for left and right lanes
+# draw a polygon representing the lane on to the image
 def lane_image( undist, M_inv, left_fit, right_fit ):
     # Create an image to draw the lines on
     warp_zero = np.zeros_like(undist[:,:,0]).astype(np.uint8)
     color_warp = np.dstack((warp_zero, warp_zero, warp_zero))
 
+    # Calculate points on the curves representing left and right lane
     ploty = np.linspace(0, undist.shape[0]-1, undist.shape[0] )
     left_fitx = left_fit[0]*ploty**2 + left_fit[1]*ploty + left_fit[2]
     right_fitx = right_fit[0]*ploty**2 + right_fit[1]*ploty + right_fit[2]
@@ -256,7 +274,7 @@ def lane_image( undist, M_inv, left_fit, right_fit ):
 
     # Warp the blank back to original image space using inverse perspective matrix (Minv)
     newwarp = cv2.warpPerspective(color_warp, M_inv, (undist.shape[1], undist.shape[0])) 
-    print(np.max(newwarp))
+
     # Combine the result with the original image
     result = cv2.addWeighted(undist, 1, newwarp, 0.3, 0)
 
@@ -273,14 +291,11 @@ if __name__ == '__main__':
     plt.imshow(undist)
     plt.show()
 
-
     plt.imshow(combined)
     plt.show()
 
     plt.imshow(binary_warped, cmap='gray')
     plt.show()
-
-
 
     print(binary_warped.shape)
     print(np.max(binary_warped))
@@ -290,15 +305,13 @@ if __name__ == '__main__':
 
     left_fit, right_fit, left_pixels, right_pixels = fit_lanes(binary_warped, left_fit, right_fit, debug=True)
 
-    # Define conversions in x and y from pixels space to meters
-    ym_per_pix = 30/720 # meters per pixel in y dimension
-    xm_per_pix = 3.7/700 # meters per pixel in x dimension
+    ym_per_pix = 30/720
+    xm_per_pix = 3.7/700
 
     left_curverad, right_curverad, lane_width, lane_deviation = lane_curvature(binary_warped, xm_per_pix, ym_per_pix, left_fit, right_fit)
     print(left_curverad, 'm', right_curverad, 'm', lane_width, 'm', lane_deviation, 'm')
 
     result = lane_image( undist, M_inv, left_fit, right_fit )
-
 
     plt.imshow(result)
     plt.show()
