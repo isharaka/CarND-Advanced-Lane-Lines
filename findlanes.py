@@ -38,9 +38,13 @@ def preprocess_frame(img, mtx, dist, M, M_inv, debug=False):
 
     if debug==True:
         color_binary = np.dstack(( np.zeros_like(s_channel), sxbinary, s_binary))
+        cv2.imwrite('output_images/pre_process_combined.jpg',np.asarray(255*color_binary)[:,:,::-1].copy())
 
     # Warp the preprocessed image to a birds eye view
     binary_warped = cv2.warpPerspective(combined, M, (img.shape[1], img.shape[0]))
+
+    if debug==True:
+        cv2.imwrite('output_images/pre_process_warped.jpg',255*binary_warped)
 
     return undist, combined, binary_warped
 
@@ -127,8 +131,10 @@ def fit_lanes_init(binary_warped, debug=False):
         print (leftx.shape)
         print (rightx.shape)
 
-        plt.plot(rightx, righty, 'ro')
+        f, ax = plt.subplots(1,1)
+        ax.plot(rightx, righty, 'ro')
         plt.show()
+        f.savefig('output_images/fit_lanes_init_pixels.jpg')
 
         # Generate x and y values for plotting
         ploty = np.linspace(0, binary_warped.shape[0]-1, binary_warped.shape[0] )
@@ -137,13 +143,16 @@ def fit_lanes_init(binary_warped, debug=False):
 
         out_img[nonzeroy[left_lane_inds], nonzerox[left_lane_inds]] = [255, 0, 0]
         out_img[nonzeroy[right_lane_inds], nonzerox[right_lane_inds]] = [0, 0, 255]
-        plt.imshow(out_img)
-        plt.plot(left_fitx, ploty, color='yellow')
-        plt.plot(right_fitx, ploty, color='yellow')
+
+        f, ax = plt.subplots(1,1)
+        ax.imshow(out_img)
+        ax.plot(left_fitx, ploty, color='yellow')
+        ax.plot(right_fitx, ploty, color='yellow')
         plt.xlim(0, 1280)
         plt.ylim(720, 0)
 
         plt.show()
+        f.savefig('output_images/fit_lanes_init.jpg')
 
         print(len(left_lane_inds), len(right_lane_inds))
 
@@ -204,13 +213,16 @@ def fit_lanes(binary_warped, left_fit, right_fit, debug=False):
         cv2.fillPoly(window_img, np.int_([left_line_pts]), (0,255, 0))
         cv2.fillPoly(window_img, np.int_([right_line_pts]), (0,255, 0))
         result = cv2.addWeighted(out_img, 1, window_img, 0.3, 0)
-        plt.imshow(result)
-        plt.plot(left_fitx, ploty, color='yellow')
-        plt.plot(right_fitx, ploty, color='yellow')
+
+        f, ax = plt.subplots(1,1)
+        ax.imshow(result)
+        ax.plot(left_fitx, ploty, color='yellow')
+        ax.plot(right_fitx, ploty, color='yellow')
         plt.xlim(0, 1280)
         plt.ylim(720, 0)
 
         plt.show()
+        f.savefig('output_images/fit_lanes.jpg')
 
         print(len(left_lane_inds), len(right_lane_inds))
 
@@ -281,12 +293,12 @@ def lane_image( undist, M_inv, left_fit, right_fit ):
     return result
 
 if __name__ == '__main__':
-    image = mpimg.imread('test_images/test6.jpg')
+    image = mpimg.imread('test_images/test5.jpg')
 
     mtx, dist = calibration_data()
     M, M_inv = perspective_transform()
 
-    undist, combined, binary_warped = preprocess_frame(image, mtx, dist, M, M_inv)
+    undist, combined, binary_warped = preprocess_frame(image, mtx, dist, M, M_inv, debug=True)
 
     plt.imshow(undist)
     plt.show()
@@ -312,6 +324,7 @@ if __name__ == '__main__':
     print(left_curverad, 'm', right_curverad, 'm', lane_width, 'm', lane_deviation, 'm')
 
     result = lane_image( undist, M_inv, left_fit, right_fit )
+    cv2.imwrite('output_images/overlay.jpg',np.asarray(result)[:,:,::-1].copy())
 
     plt.imshow(result)
     plt.show()
