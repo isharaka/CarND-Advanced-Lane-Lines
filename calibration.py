@@ -81,3 +81,4 @@ if __name__ == '__main__':
     plt.subplots_adjust(left=0., right=1, top=0.9, bottom=0.)
 
     plt.show()
+    f.savefig('output_images/calibration.jpg')
