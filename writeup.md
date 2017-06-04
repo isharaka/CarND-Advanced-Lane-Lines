@@ -33,6 +33,7 @@ The goals / steps of this project are the following:
 [image11]: ./output_images/fit_lanes.jpg "Subsequent lane fitting"
 [image12]: ./output_images/overlay.jpg "Overlay"
 [image13]: ./output_images/fit_lanes_init_problem.jpg "Initial lane fitting"
+[image14]: ./output_images/curvature_equation.png "Curvature"
 
 
 [video1]: ./output.mp4 "Video"
@@ -124,23 +125,50 @@ I verified that my perspective transform was working as expected by testing the 
 
 See function`fit_lanes_init` in `findlanes.py`.
 
-Then I did some other stuff and fit my lane lines with a 2nd order polynomial kinda like this:
+First all the nonzero pixels were extracted from the image processed as described in the previous sections.
+Then the pixels mostlikely to represent lanes were searched by dividing the frame in to nine horizontal strips, starting from the bottom strip.
+The starting points to the search were obtained using a histogram of nonzero pixels on the bottom half of the image. (i.e. peaks in left and right halves were taken as the start points for left and right lanes)
+When moving up the strips the starting points were adjusted using the pixels found in the previous strip.
 
+Once all the lane pixels were found a quadratic curve was fitted using `np.polyfit`.
+
+*The lane search and fitted curves on test image test5.jpg*
 ![alt text][image9]
+
+*The lane pixel positions of right lane*
 ![alt text][image10]
 
 See function`fit_lanes` in `findlanes.py`.
+
+This functions searches for lane pixels in the visinity of a curves provided to it. In video processing this is used when a reliable fit was obtained in the previous frames. The 'reliability' was mesaured using the number of lane pixels. See lines 64-65 in function `pipeline` in `main.py`.
+
+*The lane search and fitted curves on test image test5.jpg using the fit obtained from the function `fit_lanes_init`*
 ![alt text][image11]
 
 #### 5. Describe how (and identify where in your code) you calculated the radius of curvature of the lane and the position of the vehicle with respect to center.
 
 See function`lane_curvature` in `findlanes.py`.
 
+First I used the fitted quadratic curves to calculate the points of the curves.
+Then this points were scaled to real world using the meters/pixel values in x and y directions.
+Next new quadratic curves were fitted to these 'real world' points.
+
+![alt text][image14]
+
+Once this is done the curvature were calcualted at the points closest to the camera using the above [equation](http://www.intmath.com/applications-differentiation/8-radius-curvature.php).
+
+Lane width is calcualted as the distance between the points where the lanes intersects the bootom of the frame, scaled to real world co-ordinates.
+
+
+
 
 
 #### 6. Provide an example image of your result plotted back down onto the road such that the lane area is identified clearly.
 
 See function`lane_image` in `findlanes.py`.
+
+First I used the fitted quadratic curves to plot the curves over an image that is of the same dimensions as the warped image used for fitting. Then this plot was perspective transformed (`cv2.warpPerspective`) using the inverse of the perpsective transformation used to warp the original image.
+The result of this was then superimposed on to the original undistorted image using `cv2.addWeighted`.
 
  Here is an example of my result on a test image:
 
@@ -172,5 +200,5 @@ One problem I faced was in fitting curves to lanes. With broken lane lines somet
 
 I used averaging the fit over a number of previous frames to mitigate this. See lines 84-86 in function `pipeline` in `main.py`.
 
-It may be possible to improve the fit in such cases by artificially combining the lane fragments befre fitting.
+It may be possible to improve the fit in such cases by artificially combining the lane fragments before fitting.
 
