@@ -40,10 +40,17 @@ def perspective_transform(debug=False):
         plt.imshow(warped)
         plt.show()
 
+        warped2 = cv2.warpPerspective(warped, M_inv, (image.shape[1], image.shape[0]))
+
+        cv2.imwrite('output_images/perspective_out2.jpg',np.asarray(warped2)[:,:,::-1].copy())
+
+        plt.imshow(warped2)
+        plt.show()
+
     return M, M_inv
 
 if __name__ == '__main__':
-    image = mpimg.imread('test_images/straight_lines1.jpg')
+    image = mpimg.imread('test_images/test5.jpg')
 
     mtx, dist = calibration_data()
     M, M_inv = perspective_transform(debug=True)
@@ -61,3 +68,5 @@ if __name__ == '__main__':
     ax2.set_title('Warped Image')
     plt.subplots_adjust(left=0., right=1, top=0.9, bottom=0.)
     plt.show()
+
+    f.savefig('output_images/perspective_test.jpg')
